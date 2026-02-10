@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>Flow Quiz</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<!-- ヘッダーログインエリア -->
+<div id="authBar" class="auth-bar">
+  <span id="authStatus">未ログイン</span>
+  <button id="authBtn">ログイン / アカウント作成</button>
+</div>
+
+
+<!-- =========================
+     ステージ一覧
+========================= -->
+<div id="stageList" class="stage-list">
+
+  <button class="stage-card" onclick="openStage(1)">
+    <div class="stage-title">🩸 ステージ1：正常値の判断</div>
+    <div class="stage-subtitle">高値・正常値・低値を即答</div>
+  </button>
+
+  <button class="stage-card" onclick="openStage(2)">
+    <div class="stage-title">🧠 ステージ2：血液ガスの基礎知識</div>
+    <div class="stage-subtitle">pH / CO₂ / HCO₃⁻ の役割を理解する</div>
+  </button>
+
+  <button class="stage-card" onclick="openStage(3)">
+    <div class="stage-title">🧪 ステージ3：酸塩基の4分類</div>
+    <div class="stage-subtitle">pHとCO₂/HCO₃⁻の方向で主病態を決める</div>
+  </button>
+
+  <button class="stage-card" onclick="openStage(4)">
+    <div class="stage-title">⏱ ステージ4：代謝の代償と合併</div>
+    <div class="stage-subtitle">代謝の代償と合併</div>
+  </button>
+
+  <button class="stage-card" onclick="openStage(5)">
+    <div class="stage-title">🫁 ステージ5：代謝性アシドーシスの鑑別に必要な補正AG・補正HCO3</div>
+    <div class="stage-subtitle">代謝性アシドーシスの鑑別に必要な補正AG・補正HCO3</div>
+  </button>
+
+  <button class="stage-card" onclick="openStage(6)">
+    <div class="stage-title">🧩 ステージ6：呼吸性の慢性と急性</div>
+    <div class="stage-subtitle">血ガス → 判断 → 推論</div>
+  </button>
+  <button class="stage-card" onclick="openStage(7)">
+    <div class="stage-title">🧩 ステージ7：総合問題</div>
+    <div class="stage-subtitle">血ガス → 判断 → 推論</div>
+  </button>
+  <button class="stage-card" onclick="openStage(8)">
+    <div class="stage-title">🧩 ステージ8：原因検索の検査と鑑別</div>
+    <div class="stage-subtitle">血ガス → 判断 → 推論</div>
+  </button>
+  <button class="stage-card" onclick="openStage(9)">
+    <div class="stage-title">🧩 ステージ9：症例ベース総合問題</div>
+    <div class="stage-subtitle">血ガス → 判断 → 推論</div>
+  </button>
+
+</div>
+
+<div id="knowledgeModal" class="modal" style="display:none">
+  <div class="modal-content">
+    <h3 id="knowledgeTitle"></h3>
+    <div id="knowledgeBody"></div>
+    <button onclick="closeKnowledge()">閉じる</button>
+  </div>
+</div>
+
+
+<!-- =========================
+     ステージ詳細
+========================= -->
+<div id="stageDetail" style="display:none">
+  <h2 id="stageTitle"></h2>
+  <p id="stageDescription"></p>
+  <p id="stageKnowledge"></p>
+
+  <button onclick="startGame()">▶ ゲーム開始</button>
+  <button onclick="endToList()">戻る</button>
+</div>
+
+<!-- =========================
+     ゲーム画面
+========================= -->
+<div id="gameScreen" style="display:none">
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="stageName"></div>
+    <div id="clearRemain"></div>
+    <div id="speedInfo">🚀 speed: --</div>
+
+    <div id="hpBar">
+      <div id="hpFill"></div>
+    </div>
+
+    <div id="controls">
+      <button id="pauseBtn">⏸ 一時停止</button>
+      <button id="resumeBtn" style="display:none">▶ 再開</button>
+      <button id="menuBtn">🏠 メニュー</button>
+    </div>
+  </div>
+
+  <!-- =========================
+       CASE 画面
+  ========================= -->
+  <div id="caseArea" class="case-card" style="display:none">
+
+
+    <!-- case 制限時間 -->
+    <div id="caseTimer" class="case-timer" style="display:none">
+      ⏱ 残り <span id="caseTimerSec">15</span> 秒
+    </div>
+
+    <h3 class="case-title">🩺 症例</h3>
+    <div id="caseText" class="case-text"></div>
+
+
+    <h4>❓ 問題</h4>
+    <div id="caseQuestion" class="case-question"></div>
+
+    <h4>📝 これまでの判断</h4>
+    <div id="caseMemo"></div>
+
+  </div>
+
+  <!-- =========================
+       レーン（normal問題）
+  ========================= -->
+  <div id="laneContainer">
+    <div class="lane" data-lane="0">
+      <div id="question-0" class="question"></div>
+    </div>
+    <div class="lane" data-lane="1">
+      
+    </div>
+  </div>
+
+  <!-- 解説 -->
+  <div id="explanationArea">
+    <h4>📘 解説</h4>
+    <div id="explanationText" class="muted">
+      問題を解くと、ここに解説が表示されます
+    </div>
+  </div>
+
+  <!-- 選択肢 -->
+  <div id="choices"></div>
+
+</div>
+
+<!-- =========================
+     オーバーレイ・その他
+========================= -->
+<div id="countdown" class="overlay" style="display:none"></div>
+<div id="deadline"></div>
+<div id="popup" class="popup"></div>
+
+<img
+  id="stageImage"
+  style="max-width:100%; margin:12px 0; display:none"
+/>
+<!-- ログイン促しモーダル -->
+<div id="loginModal" class="overlay" style="display:none">
+  <div class="login-card">
+  <h2>🔐 ログイン / 新規登録</h2>
+  <p class="login-sub">
+    ログインすると <strong>ステージ4以降</strong> が解放されます
+  </p>
+
+  <label>
+    <span>✉️ メールアドレス</span>
+    <input id="emailInput" type="email" placeholder="example@email.com" />
+  </label>
+
+  <label>
+    <span>🔑 パスワード</span>
+    <input id="passwordInput" type="password" placeholder="6文字以上" />
+  </label>
+
+  <button id="loginBtn" class="primary-btn">
+    ▶ ログイン
+  </button>
+
+  <button id="signupBtn" class="secondary-btn">
+    ＋ 新規登録
+  </button>
+
+  <div class="divider">あとでやる</div>
+
+  <button id="closeLoginModal" class="ghost-btn">
+    閉じる
+  </button>
+</div>
+
+</div>
+
+
+
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="supabase.js"></script>
+<script src="game.js"></script>
+
+</body>
+</html>
