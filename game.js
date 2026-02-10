@@ -439,6 +439,9 @@ function startHpDrain() {
   hpDrainTimer = setInterval(() => {
     if (!isPlaying || isPaused) return;
 
+    const q = stageQuizzes[current];
+    if (q?.questionType === "case") return; // ★ CASE中は減らさない
+
     hp -= HP_DRAIN_PER_SEC;
     updateHpBar();
 
@@ -530,12 +533,32 @@ let caseTimerId = null;
 // =========================
 // Game start
 // =========================
+const sounds = {
+  correct: new Audio("sounds/correct.mp3"),
+  wrong: new Audio("sounds/wrong.mp3"),
+  click: new Audio("sounds/click.mp3"),
+  bgm: new Audio("sounds/bgm.mp3")
+};
+
+// BGM設定
+sounds.bgm.loop = true;
+sounds.bgm.volume = 0.3;
+
+// 効果音は重なっても鳴るように
+function playSound(sound) {
+  const s = sound.cloneNode();
+  s.play();
+}
+document.addEventListener("click", e => {
+  if (e.target.classList.contains("choice")) return;
+  playSound(sounds.click);
+});
 function startGame() {
   document.getElementById("stageDetail").style.display = "none";
   document.getElementById("gameScreen").style.display = "block";
 
   isPaused = false;
-  
+sounds.bgm.play();
 
   startCountdown(() => {
     startStage(selectedStage);
@@ -777,6 +800,23 @@ function checkAnswer(index) {
 
     showPopup(isCorrect ? "○" : "×");
 
+    // 🔊 正解・不正解 音
+    if (isCorrect) {
+      playSound(sounds.correct);
+    } else {
+      playSound(sounds.wrong);
+    }
+
+    if (!isCorrect) {
+      hp -= HP_WRONG;       // ★ CASEのミスだけ減点
+      updateHpBar();
+
+      if (hp <= 0) {
+        endStage("gameover");
+        return;
+      }
+    }
+
     // 解説表示（CASEは数秒で消す）
     const expEl = document.getElementById("explanationText");
     expEl.textContent = step.explanation || "";
@@ -789,7 +829,6 @@ function checkAnswer(index) {
       memoList.push(step.memo);
     }
 
-    // ★ 進行は advanceQuestion に一本化
     advanceQuestion({ correct: isCorrect });
     return;
   }
@@ -801,11 +840,15 @@ function checkAnswer(index) {
 
   showPopup(isCorrect ? "○" : "×");
 
+  // 🔊 正解・不正解 音
   if (isCorrect) {
+    playSound(sounds.correct);
     hp += HP_CORRECT;
   } else {
+    playSound(sounds.wrong);
     hp -= HP_WRONG;
   }
+
   updateHpBar();
 
   if (q.explanation) {
@@ -819,6 +862,7 @@ function checkAnswer(index) {
 
   advanceQuestion({ correct: isCorrect });
 }
+
 
 
 function openStage(stage) {
@@ -917,6 +961,17 @@ document.getElementById("signupBtn").onclick = async () => {
 // =========================
 // Case timer
 // =========================
+function showCountdown(num) {
+  const el = document.getElementById("countdown");
+  el.textContent = num;
+  el.style.display = "block";
+}
+function showJudge(isCorrect) {
+  const el = document.getElementById("judge");
+  el.textContent = isCorrect ? "◯" : "×";
+  el.className = "judge " + (isCorrect ? "correct" : "wrong");
+}
+
 function startCaseTimer(step) {
   stopCaseTimer();
   const secEl = document.getElementById("caseTimerSec");
@@ -930,10 +985,18 @@ function startCaseTimer(step) {
     t--;
     secEl.textContent = t;
     if (t <= 0) {
-      stopCaseTimer();
-      // ★ タイムアウトも advanceQuestion に一本化
-      advanceQuestion({ correct: false });
-    }
+  stopCaseTimer();
+
+  hp -= HP_WRONG;          // ★ タイムアウトも減点
+  updateHpBar();
+
+  if (hp <= 0) {
+    endStage("gameover");
+    return;
+  }
+
+  advanceQuestion({ correct: false });
+}
   }, 1000);
 }
 
