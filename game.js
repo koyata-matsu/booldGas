@@ -37,10 +37,6 @@ const authBar = document.getElementById("authBar");
 
 const emailInput = document.getElementById("emailInput");
 const passwordInput = document.getElementById("passwordInput");
-async function checkLogin() {
-  const { data } = await db.auth.getSession();
-  isLoggedIn = !!data.session;
-}
 
 let currentUserEmail = null;
 function openLoginModal() {
@@ -205,11 +201,7 @@ document.getElementById("authBtn").onclick = async () => {
   
 };
 
-document.addEventListener("click", e => {
-  if (e.target.tagName === "BUTTON") {
-    playSound(sounds.click);
-  }
-});
+
 
 
 
@@ -624,34 +616,59 @@ const sounds = {
   bgm: new Audio("sounds/bgm.mp3")
 };
 
+sounds.bgm.loop = true;
+sounds.bgm.volume = 0.05;
+
+function playSound(sound, volume = 1) {
+  const s = sound.cloneNode();
+  s.volume = volume;
+  s.play().catch(() => {});
+}
+
+// 🔥 ここに置く
+document.addEventListener("click", e => {
+  if (e.target.tagName === "BUTTON") {
+    playSound(sounds.click, 0.05);
+  }
+});
+
+
 // BGM設定
 sounds.bgm.loop = true;
-sounds.bgm.volume = 0.3;
+sounds.bgm.volume = 0.05;
 
 // 効果音は重なっても鳴るように
-function playSound(sound) {
+function playSound(sound, volume = 1) {
   const s = sound.cloneNode();
-  s.play();
+  s.volume = volume;
+  s.play().catch(() => {});
 }
-document.addEventListener("click", e => {
-  if (e.target.classList.contains("choice")) return;
-  playSound(sounds.click);
-});
+
+
 function startGame() {
-  authBar.style.display = "none"; // ← 追加
+    // 🔥 横向きチェック
+  if (window.innerWidth <= 1024 && !isLandscape()) {
+    showRotateOverlay();
+    return;
+  }
+
+  authBar.style.display = "none";
   document.getElementById("stageDetail").style.display = "none";
   document.getElementById("gameScreen").style.display = "block";
 
   isPaused = false;
-sounds.bgm.play();
+  sounds.bgm.play();
 
   startCountdown(() => {
     startStage(selectedStage);
-    
   });
 }
 
-
+window.addEventListener("resize", () => {
+  if (isLandscape()) {
+    hideRotateOverlay();
+  }
+});
 function shuffleArray(arr) {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -1154,57 +1171,6 @@ function paintAnswers(correctIndexes, selectedIndexes) {
 
 
 
-function openStage(stage) {
-  selectedStage = stage;
-
-  document.getElementById("stageList").style.display = "none";
-  document.getElementById("stageDetail").style.display = "block";
-
-  const info = getStages()[String(stage)] || {};
-
-  document.getElementById("stageTitle").textContent =
-    info.title || "";
-
-  document.getElementById("stageDescription").textContent =
-    info.description || "";
-
-  // ★ knowledge（改行対応・安全）
-  const knowledgeEl = document.getElementById("stageKnowledge");
-  knowledgeEl.innerHTML = info.knowledge
-    ? info.knowledge.replace(/\n/g, "<br>")
-    : "";
-
-  // ステージ1〜3
-  if (stage <= 3) {
-    enterStage(stage);
-    return;
-  }
-
-  // ステージ4
-  if (stage === 4) {
-    if (!isLoggedIn) {
-      openLoginModal();
-      return;
-    }
-    enterStage(stage);
-    return;
-  }
-
-  // ステージ5以降
-  if (!isLoggedIn) {
-    document.getElementById("loginModal").style.display = "flex";
-    return;
-  }
-
-  if (!clearedStages.includes(stage - 1)) {
-    alert(`ステージ${stage - 1}をクリアしてください`);
-    return;
-  }
-
-  enterStage(stage);
-}
-
-
 function enterStage(stage) {
   selectedStage = stage;
   document.getElementById("stageList").style.display = "none";
@@ -1273,7 +1239,19 @@ document.getElementById("signupBtn").onclick = async () => {
   // ★ ステージ状態を更新
   renderStageList();
 };
+function isLandscape() {
+  return window.innerWidth > window.innerHeight;
+}
 
+function showRotateOverlay() {
+  const overlay = document.getElementById("rotateOverlay");
+  overlay.style.display = "flex";
+}
+
+function hideRotateOverlay() {
+  const overlay = document.getElementById("rotateOverlay");
+  overlay.style.display = "none";
+}
 
 
 
@@ -1352,12 +1330,7 @@ function stopCaseTimer() {
 // =========================
 // Utils
 // =========================
-function showPopup(text) {
-  const p = document.getElementById("popup");
-  p.textContent = text;
-  p.style.display = "block";
-  setTimeout(() => (p.style.display = "none"), 800);
-}
+
 
 function startCountdown(cb) {
   const el = document.getElementById("countdown");
