@@ -823,7 +823,31 @@ button:disabled {
   color: white;
   border-radius: 8px;
 }
+.stage-card {
+  position: relative;
+}
+.stage-badge {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-weight: bold;
+  color: white;
+}
 
+.stage-badge.playable {
+  background: #22c55e;
+}
+
+.stage-badge.locked {
+  background: #ef4444;
+}
+
+.stage-badge.login {
+  background: #6366f1;
+}
 /* =========================
    アニメーション
 ========================= */
@@ -1045,31 +1069,7 @@ button:disabled {
     max-width: 100%;
     margin: 0 auto 10px;
   }
-  .stage-card {
-  position: relative;
-}
-.stage-badge {
-  position: absolute;
-  top: 8px;
-  right: 10px;
-  font-size: 12px;
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-weight: bold;
-  color: white;
-}
-
-.stage-badge.playable {
-  background: #22c55e;
-}
-
-.stage-badge.locked {
-  background: #ef4444;
-}
-
-.stage-badge.login {
-  background: #6366f1;
-}
+  
 
 
 }

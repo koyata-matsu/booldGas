@@ -120,9 +120,16 @@ if (stage === 9 && currentUserEmail !== ADMIN_EMAIL) {
   }
 
   if (!clearedStages.includes(stage - 1)) {
-    alert(`ステージ${stage - 1}をクリアしてください`);
-    return;
-  }
+  alert(`ステージ${stage - 1}をクリアしてください`);
+
+  // 🔥 メニューに戻す
+  document.getElementById("stageDetail").style.display = "none";
+  document.getElementById("gameScreen").style.display = "none";
+  document.getElementById("stageList").style.display = "block";
+  authBar.style.display = "flex";
+
+  return;
+}
 
   enterStage(stage);
 };
@@ -1460,6 +1467,7 @@ function advanceQuestion({ correct }) {
 
   if (correct) {
     correctCount++;
+    updateRemain();
     speed = Math.min(
       getMaxSpeed(),
       speed + stageConfig.speedUpRate
@@ -1486,6 +1494,7 @@ function advanceQuestion({ correct }) {
 
       setTimeout(() => {
         current++;
+        updateRemain();
         currentStep = 0;
         memoList = [];
         initLanes();
