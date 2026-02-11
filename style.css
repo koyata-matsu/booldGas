@@ -690,16 +690,18 @@ button:disabled {
 
 
 @media (max-width: 1024px) and (orientation: portrait) {
-  #rotateNotice {
+
+  /* ゲーム中だけ横向き強制 */
+  body.game-playing #rotateNotice {
     display: flex;
   }
 
-  #gameScreen,
-  #stageList,
-  #stageDetail {
+  body.game-playing #gameScreen {
     display: none !important;
   }
+
 }
+
 
 
 @keyframes blink {

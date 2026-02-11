@@ -68,67 +68,7 @@ const resumeBtn  = document.getElementById("resumeBtn");
 const stageList  = document.getElementById("stageList");
 const gameScreen = document.getElementById("gameScreen");
 const overlay    = document.getElementById("countdown");
-window.openStage = function(stage) {
-  
-  selectedStage = stage;
-authBar.style.display = "none"; // ← 追加
 
-  document.getElementById("stageList").style.display = "none";
-  document.getElementById("stageDetail").style.display = "block";
-
-  const info = getStages()[String(stage)] || {};
-  document.getElementById("stageTitle").textContent = info.title || "";
-  document.getElementById("stageDescription").textContent = info.description || "";
-  document.getElementById("stageKnowledge").textContent = info.knowledge || "";
-// 🔥 管理者メール
-const ADMIN_EMAIL = "koyatamaro@icloud.com";
-
-if (stage === 9 && currentUserEmail !== ADMIN_EMAIL) {
-  alert("🚧 ステージ9は現在作成中です");
-
-  document.getElementById("stageDetail").style.display = "none";
-  document.getElementById("gameScreen").style.display = "none";
-  document.getElementById("stageList").style.display = "block";
-  authBar.style.display = "flex";
-
-  return;
-}
-  // ステージ1〜3
-  if (stage <= 3) {
-    enterStage(stage);
-    return;
-  }
-
-  // ステージ4
-  if (stage === 4) {
-    if (!isLoggedIn) {
-      openLoginModal();
-      return;
-    }
-    enterStage(stage);
-    return;
-  }
-
-  // ステージ5以降
-  if (!isLoggedIn) {
-    document.getElementById("loginModal").style.display = "flex";
-    return;
-  }
-
-  if (!clearedStages.includes(stage - 1)) {
-  alert(`ステージ${stage - 1}をクリアしてください`);
-
-  // 🔥 メニューに戻す
-  document.getElementById("stageDetail").style.display = "none";
-  document.getElementById("gameScreen").style.display = "none";
-  document.getElementById("stageList").style.display = "block";
-  authBar.style.display = "flex";
-
-  return;
-}
-
-  enterStage(stage);
-};
 
 async function checkLogin() {
   const { data } = await db.auth.getSession();
@@ -619,11 +559,6 @@ const sounds = {
 sounds.bgm.loop = true;
 sounds.bgm.volume = 0.05;
 
-function playSound(sound, volume = 1) {
-  const s = sound.cloneNode();
-  s.volume = volume;
-  s.play().catch(() => {});
-}
 
 // 🔥 ここに置く
 document.addEventListener("click", e => {
@@ -663,6 +598,46 @@ function startGame() {
     startStage(selectedStage);
   });
 }
+window.startStage = function(stage) {
+  const quizzes = getQuizzes();
+  const stages  = getStages();
+  const stageInfo = stages[String(stage)] || {};
+
+  document.body.classList.add("game-playing");
+
+  document.getElementById("stageName").textContent =
+    `🎯 ${stageInfo.title || "Stage " + stage}`;
+
+  stageConfig = { ...DEFAULT_STAGE_CONFIG, ...stageInfo };
+
+  stageQuizzes = shuffleQuizzesKeepCase(
+    quizzes.filter(q => Number(q.stage) === Number(stage))
+  );
+
+  current = 0;
+  currentStep = 0;
+  memoList = [];
+  isPlaying = true;
+  isPaused = false;
+
+  hp = HP_MAX;
+  updateHpBar();
+  startHpDrain();
+  correctCount = 0;
+  resetSpeed();
+
+  if (stageQuizzes.length === 0) {
+    alert("このステージに問題がありません");
+    endToList();
+    return;
+  }
+
+  initLanes();
+  renderQuestion();
+  updateRemain();
+  move();
+  setTimeout(autoScaleGame, 50);
+};
 
 window.addEventListener("resize", () => {
   if (isLandscape()) {
@@ -698,46 +673,28 @@ function shuffleQuizzesKeepCase(quizzes) {
 }
 
 
-function startStage(stage) {
-  const quizzes = getQuizzes();
-  const stages  = getStages();
-const stageInfo = getStages()[String(stage)] || {};
-document.getElementById("stageName").textContent =
-  `🎯 ${stageInfo.title || "Stage " + stage}`;
+function openStage(stage) {
+  selectedStage = stage;
 
-  stageConfig = { ...DEFAULT_STAGE_CONFIG, ...(stages[String(stage)] || {}) };
-  stageQuizzes = shuffleQuizzesKeepCase(
-  quizzes.filter(q => Number(q.stage) === Number(stage))
-);
+  document.getElementById("stageList").style.display = "none";
+  document.getElementById("stageDetail").style.display = "block";
 
-  current = 0;
-  currentStep = 0;
-  memoList = [];
-  isPlaying = true;
-  isPaused = false;
+  const info = getStages()[String(stage)] || {};
 
-  // ★ HP 初期化
-  hp = HP_MAX;
-  updateHpBar();
-  startHpDrain();
-    correctCount = 0;
-    resetSpeed();
-  if (stageQuizzes.length === 0) {
-    alert("このステージに問題がありません");
-    endToList();
-    return;
-  }
+  document.getElementById("stageTitle").textContent =
+    info.title || "";
 
-  initLanes();      // ★ 超重要
-  renderQuestion();
-  updateRemain();   // ★ 追加
-  move();           // ★ Flow開始
-  setTimeout(autoScaleGame, 50);
+  document.getElementById("stageDescription").textContent =
+    info.description || "";
 
+  document.getElementById("stageKnowledge").textContent =
+    info.knowledge || "";
 }
+
 function endStage(type) {
   isPlaying = false;
   isPaused = false;
+document.body.classList.remove("game-playing");
 
   sounds.bgm.pause();
   sounds.bgm.currentTime = 0;
@@ -1020,6 +977,7 @@ function endToList() {
   currentStep = 0;
   memoList = [];
   stopHpDrain();
+document.body.classList.remove("game-playing");
 
   document.getElementById("stageDetail").style.display = "none";
   document.getElementById("gameScreen").style.display = "none";
