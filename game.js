@@ -30,7 +30,10 @@ let gameTimer = null;   // setInterval 用
 let isLoggedIn = false;
 let clearedStages = JSON.parse(
   localStorage.getItem("clearedStages") || "[]"
-);
+).map(Number);
+let selectedIndexes = [];
+const BASE_WIDTH = 1200; // PC基準幅
+const authBar = document.getElementById("authBar");
 
 const emailInput = document.getElementById("emailInput");
 const passwordInput = document.getElementById("passwordInput");
@@ -43,6 +46,8 @@ let currentUserEmail = null;
 function openLoginModal() {
   document.getElementById("loginModal").style.display = "flex";
 }
+let quizzesCache = [];
+let stagesCache = {};
 
 
 // =========================
@@ -68,7 +73,9 @@ const stageList  = document.getElementById("stageList");
 const gameScreen = document.getElementById("gameScreen");
 const overlay    = document.getElementById("countdown");
 window.openStage = function(stage) {
+  
   selectedStage = stage;
+authBar.style.display = "none"; // ← 追加
 
   document.getElementById("stageList").style.display = "none";
   document.getElementById("stageDetail").style.display = "block";
@@ -77,7 +84,19 @@ window.openStage = function(stage) {
   document.getElementById("stageTitle").textContent = info.title || "";
   document.getElementById("stageDescription").textContent = info.description || "";
   document.getElementById("stageKnowledge").textContent = info.knowledge || "";
+// 🔥 管理者メール
+const ADMIN_EMAIL = "koyatamaro@icloud.com";
 
+if (stage === 9 && currentUserEmail !== ADMIN_EMAIL) {
+  alert("🚧 ステージ9は現在作成中です");
+
+  document.getElementById("stageDetail").style.display = "none";
+  document.getElementById("gameScreen").style.display = "none";
+  document.getElementById("stageList").style.display = "block";
+  authBar.style.display = "flex";
+
+  return;
+}
   // ステージ1〜3
   if (stage <= 3) {
     enterStage(stage);
@@ -148,6 +167,13 @@ signupBtn.onclick = async () => {
 
   alert("確認メールを送りました。メールを確認してください。");
 };
+function showMenuScreen() {
+  stageList.style.display = "block";
+  gameScreen.style.display = "none";
+  stageDetail.style.display = "none";
+
+  authBar.style.display = "flex";  // ← ここ絶対
+}
 
 function updateAuthBar() {
   const statusEl = document.getElementById("authStatus");
@@ -172,16 +198,18 @@ document.getElementById("authBtn").onclick = async () => {
   
 };
 
-document.addEventListener("DOMContentLoaded", async () => {
-  await checkLogin();
-  await loadFromSheet();
-  renderStageList();
+document.addEventListener("click", e => {
+  if (e.target.tagName === "BUTTON") {
+    playSound(sounds.click);
+  }
 });
+
 
 
 
 resumeBtn.onclick = () => {
   isPaused = false;
+  sounds.bgm.pause();
 setChoicesDisabled(false);
 requestAnimationFrame(move);
   resumeBtn.style.display = "none";
@@ -190,6 +218,7 @@ requestAnimationFrame(move);
 
 pauseBtn.onclick = () => {
   isPaused = true;
+  sounds.bgm.pause();
   setChoicesDisabled(true);
   pauseBtn.style.display = "none";
   resumeBtn.style.display = "inline-block";
@@ -199,7 +228,8 @@ menuBtn.onclick = () => {
   // ゲーム状態を完全リセット
   isPlaying = false;
   isPaused = false;
-
+sounds.bgm.pause();
+  sounds.bgm.currentTime = 0;
   stopHpDrain();
   stopGameLoop();
   stopCaseTimer();
@@ -220,7 +250,7 @@ menuBtn.onclick = () => {
   resumeBtn.style.display = "none";
   pauseBtn.style.display = "inline-block";
 
-  renderStageList(); // ステージ状態更新
+  showMenuScreen();  // ← 統一
 };
 
 
@@ -246,9 +276,13 @@ document.getElementById("loginBtn").onclick = async () => {
   }
 
   document.getElementById("loginModal").style.display = "none";
+
   await checkLogin();
+
+  showMenuScreen();   // ← ここ重要
   renderStageList();
 };
+
 async function logout() {
   const { error } = await db.auth.signOut();
   if (error) {
@@ -283,49 +317,70 @@ function renderStageList() {
   buttons.forEach(btn => {
     const stage = Number(btn.getAttribute("onclick").match(/\d+/)[0]);
 
-    btn.classList.remove("current", "lock", "lock-login");
+    btn.classList.remove("lock", "lock-login");
     btn.disabled = false;
 
-    /* ===== ステージ1〜3：常に解放 ===== */
+    // 既存バッジ削除
+    const oldBadge = btn.querySelector(".stage-badge");
+    if (oldBadge) oldBadge.remove();
+
+    const badge = document.createElement("div");
+    badge.classList.add("stage-badge");
+const ADMIN_EMAIL = "koyatamaro@icloud.com";
+
+if (stage === 9) {
+  if (currentUserEmail === ADMIN_EMAIL) {
+    badge.textContent = "ADMIN";
+    badge.classList.add("playable");
+  } else {
+    badge.textContent = "COMING SOON";
+    badge.classList.add("locked");
+    btn.disabled = true;
+  }
+
+  btn.appendChild(badge);
+  return;
+}
+    // ===== ステージ1〜3 =====
     if (stage <= 3) {
-      btn.classList.add("current");
-      btn.querySelector(".stage-subtitle").textContent = "▶ 今すぐプレイ";
+      badge.textContent = "PLAY";
+      badge.classList.add("playable");
+      btn.appendChild(badge);
       return;
     }
 
-    /* ===== ログインしていない場合：4以降は全部NG ===== */
+    // ===== 未ログイン =====
     if (!isLoggedIn) {
-      btn.classList.add("lock-login");
-      btn.querySelector(".stage-subtitle").textContent =
-        "🔒 ログインが必要です";
+      badge.textContent = "LOGIN";
+      badge.classList.add("login");
+      btn.appendChild(badge);
       return;
     }
 
-    /* ===== ログイン済み ===== */
-
-    // ステージ4：ログインだけでOK
+    // ===== ログイン済み =====
     if (stage === 4) {
-      btn.classList.add("current");
-      btn.querySelector(".stage-subtitle").textContent =
-        "▶ プレイ可能";
+      badge.textContent = "PLAY";
+      badge.classList.add("playable");
+      btn.appendChild(badge);
       return;
     }
+    // 🔥 ステージ9は常に作成中
 
-    // ステージ5以降：前ステージクリア必須
     const prevStage = stage - 1;
+
     if (!clearedStages.includes(prevStage)) {
-      btn.classList.add("lock");
-      btn.querySelector(".stage-subtitle").textContent =
-        `🔒 ステージ${prevStage}をクリアしてください`;
+      badge.textContent = "LOCK";
+      badge.classList.add("locked");
+      btn.appendChild(badge);
       return;
     }
 
-    // 解放済み
-    btn.classList.add("current");
-    btn.querySelector(".stage-subtitle").textContent =
-      "▶ プレイ可能";
+    badge.textContent = "PLAY";
+    badge.classList.add("playable");
+    btn.appendChild(badge);
   });
 }
+
 
 
 
@@ -460,10 +515,10 @@ function stopHpDrain() {
 }
 
 function getQuizzes() {
-  return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+  return quizzesCache || [];
 }
 function getStages() {
-  return JSON.parse(localStorage.getItem(STAGE_KEY)) || {};
+  return stagesCache || {};
 }
 function updateHpBar() {
   hp = Math.max(0, Math.min(HP_MAX, hp));
@@ -483,15 +538,37 @@ function updateHpBar() {
 function initLanes() {
   lanes = [];
 
-  // レーン1のみ（ログイン前）
+  const isMobileOrTablet = window.innerWidth <= 1024;
+
+  let startX;
+
+  if (isMobileOrTablet) {
+    // 画面の80%位置からスタート（少し見えている）
+    startX = window.innerWidth * 0.8;
+  } else {
+    // PCは今まで通り
+    startX = window.innerWidth;
+  }
+
   lanes.push({
-    x: window.innerWidth,
+    x: startX,
     quizIndex: current,
     resolved: false
   });
 
   updateSpeedInfo();
 }
+function getMaxSpeed() {
+  const isMobile = window.innerWidth <= 1024;
+  const isLandscape = window.innerWidth > window.innerHeight;
+
+  if (isMobile && isLandscape) {
+    return Math.min(stageConfig.speedMax, 3.5);
+  }
+
+  return stageConfig.speedMax;
+}
+
 
 
 
@@ -554,6 +631,7 @@ document.addEventListener("click", e => {
   playSound(sounds.click);
 });
 function startGame() {
+  authBar.style.display = "none"; // ← 追加
   document.getElementById("stageDetail").style.display = "none";
   document.getElementById("gameScreen").style.display = "block";
 
@@ -630,49 +708,35 @@ document.getElementById("stageName").textContent =
   renderQuestion();
   updateRemain();   // ★ 追加
   move();           // ★ Flow開始
+  setTimeout(autoScaleGame, 50);
+
 }
 function endStage(type) {
   isPlaying = false;
   isPaused = false;
 
+  sounds.bgm.pause();
+  sounds.bgm.currentTime = 0;
   lanes = [];
   stopHpDrain();
 
   let message = "";
-  let unlockStage = null;
 
   if (type === "perfect") {
-    // クリア済み保存
-    if (!clearedStages.includes(selectedStage)) {
-      clearedStages.push(selectedStage);
+
+    // ★ 数値で保存する（超重要）
+    const stageNum = Number(selectedStage);
+
+    if (!clearedStages.includes(stageNum)) {
+      clearedStages.push(stageNum);
       localStorage.setItem(
         "clearedStages",
         JSON.stringify(clearedStages)
       );
-
-      // ログインユーザーなら Supabase にも保存
-      if (isLoggedIn && userProgress) {
-        db.from("user_progress")
-          .update({ cleared_stages: clearedStages })
-          .eq("user_id", userProgress.user_id);
-      }
     }
 
-    // ★ ステージ4以降は次のステージ解放演出
-    if (selectedStage >= 4 && selectedStage < MAX_STAGE) {
-      const nextStage = selectedStage + 1;
+    message = "🎉 ステージクリア！";
 
-      // まだ解放されていない場合のみ
-      if (!clearedStages.includes(nextStage)) {
-        unlockStage = nextStage;
-        message = `🎉 ステージ${nextStage} 解放！`;
-      }
-    }
-
-    // 通常クリア
-    if (!message) {
-      message = "🎉 ステージクリア！";
-    }
   } else {
     message = "💀 ゲームオーバー";
   }
@@ -685,10 +749,11 @@ function endStage(type) {
 
   setTimeout(() => {
     overlay.style.display = "none";
-    endToList();
-    renderStageList();
-  }, unlockStage ? 1500 : 1000);
+    showMenuScreen();
+    renderStageList(); // ← ここ超重要
+  }, 1000);
 }
+
 
 
 
@@ -701,69 +766,245 @@ function renderQuestion() {
   const q = stageQuizzes[current];
   if (!q) return;
 
+  const imgEl = document.getElementById("questionImage");
+
+  // CASE
   if (q.questionType === "case") {
     document.getElementById("laneContainer").style.display = "none";
     renderCaseUI(q);
-    renderChoices(q.steps[currentStep]);
-    startCaseTimer(q.steps[currentStep]);
-  } else {
-    document.getElementById("caseArea").style.display = "none";
-    document.getElementById("laneContainer").style.display = "block";
-    questionEls[0].textContent = q.question;
-    renderChoices(q);
+
+    const step = q.steps[currentStep];
+
+    // 画像処理
+    if (step.image) {
+      imgEl.src = step.image;
+      imgEl.style.display = "block";
+    } else {
+      imgEl.style.display = "none";
+    }
+
+    renderChoices(step);
+    startCaseTimer(step);
+    return;
   }
-  updateRemain();
+
+  // NORMAL
+  document.getElementById("caseArea").style.display = "none";
+  document.getElementById("laneContainer").style.display = "block";
+
+  // テキスト問題（あれば表示）
+  questionEls[0].textContent = q.question || "";
+
+  // 画像問題（あれば表示）
+  if (q.image) {
+    imgEl.src = q.image;
+    imgEl.style.display = "block";
+  } else {
+    imgEl.style.display = "none";
+  }
+
+  renderChoices(q);
 }
 
 function renderCaseUI(q) {
   const step = q.steps[currentStep];
+
   document.getElementById("caseArea").style.display = "block";
   document.getElementById("caseText").textContent = q.caseText || "";
   document.getElementById("caseQuestion").textContent = step.question;
 
   const memoEl = document.getElementById("caseMemo");
- memoEl.innerHTML = memoList.length
-  ? memoList.map(m => `
-      <pre class="case-memo-item">${m}</pre>
-    `).join("")
-  : `<pre class="case-memo-item muted">（まだ判断はありません）</pre>`;
+
+  if (memoList.length > 0) {
+    const lastMemo = memoList[memoList.length - 1];
+    memoEl.innerHTML = `
+      <pre class="case-memo-item">${lastMemo}</pre>
+    `;
+  } else {
+    memoEl.innerHTML = `
+      <pre class="case-memo-item muted">（まだ判断はありません）</pre>
+    `;
+  }
 }
+
 
 // =========================
 // Choices
 // =========================
 function renderChoices(quiz) {
   choicesEl.innerHTML = "";
+  selectedIndexes = [];
+
+  // answersを強制的に配列化
+  let answers = quiz.answers;
+
+  if (typeof answers === "string") {
+    answers = answers.split(",").map(n => Number(n.trim()));
+  }
+
+  if (!Array.isArray(answers)) {
+    answers = [Number(answers)];
+  }
+
+  quiz.answers = answers; // 上書きして統一
+
+  const isMulti = answers.length > 1;
 
   quiz.choices.forEach((text, index) => {
     const btn = document.createElement("button");
     btn.className = "choice";
     btn.textContent = text;
-    btn.onclick = () => checkAnswer(index);
+
+    btn.onclick = () => {
+      if (!isPlaying) return;
+
+      if (isMulti) {
+        btn.classList.toggle("selected");
+
+        if (selectedIndexes.includes(index)) {
+          selectedIndexes = selectedIndexes.filter(i => i !== index);
+        } else {
+          selectedIndexes.push(index);
+        }
+      } else {
+        checkAnswer(index);
+      }
+    };
+
     choicesEl.appendChild(btn);
   });
+
+  if (isMulti) {
+    const confirmBtn = document.createElement("button");
+    confirmBtn.textContent = "決定";
+    confirmBtn.className = "confirm-btn";
+    confirmBtn.onclick = () => checkMultiAnswer(quiz);
+    choicesEl.appendChild(confirmBtn);
+  }
 }
+
+function checkMultiAnswer(quiz) {
+  isPlaying = false;
+  isPaused = true;
+
+  const correctAnswers = [...quiz.answers].sort();
+  const selected = [...selectedIndexes].sort();
+
+  const isCorrect =
+    correctAnswers.length === selected.length &&
+    correctAnswers.every((v, i) => v === selected[i]);
+
+  const buttons = document.querySelectorAll("#choices .choice");
+
+  buttons.forEach((btn, i) => {
+    btn.disabled = true;
+
+    const isRight = correctAnswers.includes(i);
+    const isSelected = selected.includes(i);
+
+    if (isRight && isSelected) {
+      // 正しく選んだ
+      btn.classList.add("correct");
+    } 
+    else if (!isRight && isSelected) {
+      // 間違って選んだ
+      btn.classList.add("wrong");
+    }
+    else if (isRight && !isSelected) {
+      // 選び忘れた正解
+      btn.classList.add("correct");
+    }
+  });
+
+  showPopup(isCorrect ? "○" : "×");
+
+  if (isCorrect) {
+    playSound(sounds.correct);
+    hp += HP_CORRECT;
+  } else {
+    playSound(sounds.wrong);
+    hp -= HP_WRONG;
+  }
+
+  updateHpBar();
+
+  if (hp <= 0) {
+    endStage("gameover");
+    return;
+  }
+
+  setTimeout(() => {
+    isPaused = false;
+    advanceQuestion({ correct: isCorrect });
+  }, 1200);
+}
+
+
+
+
+function highlightAnswers(quiz, selected = []) {
+  const buttons = document.querySelectorAll("#choices .choice");
+
+  buttons.forEach((btn, index) => {
+    btn.disabled = true;
+
+    if (quiz.answers.includes(index)) {
+      btn.classList.add("correct");  // 正解は緑
+    } else if (selected.includes(index)) {
+      btn.classList.add("wrong");    // 間違いは赤
+    }
+  });
+}
+
+
+
 function resetSpeed() {
-  speed = Number(stageConfig.speedStart);
+  const isMobile = window.innerWidth <= 1024;
+  const isLandscape = window.innerWidth > window.innerHeight;
+
+  let baseSpeed;
+
+  if (isMobile && isLandscape) {
+    // 横向きモバイルは少し遅く
+    baseSpeed = stageConfig.speedStart * 0.6;
+  } else {
+    // PCは画面幅に応じて変化
+    const widthRatio = window.innerWidth / BASE_WIDTH;
+
+    // 速くなりすぎ・遅くなりすぎ防止
+    const clampedRatio = Math.min(1.3, Math.max(0.7, widthRatio));
+
+    baseSpeed = stageConfig.speedStart * clampedRatio;
+  }
+
+  // ★ 最終的な上限を適用
+  speed = Math.min(baseSpeed, getMaxSpeed());
+
   updateSpeedInfo();
 }
 
+
 function endToList() {
-    
   isPlaying = false;
   isPaused = false;
+
+  sounds.bgm.pause();
+  sounds.bgm.currentTime = 0;
 
   lanes = [];
   current = 0;
   currentStep = 0;
   memoList = [];
-  stopHpDrain(); // ★ 必ず止める
-
+  stopHpDrain();
 
   document.getElementById("stageDetail").style.display = "none";
   document.getElementById("gameScreen").style.display = "none";
   document.getElementById("stageList").style.display = "block";
+
+  showMenuScreen(); 
+  document.getElementById("gameInner").style.transform = "scale(1)";
 }
+
 function showExplanation(correct) {
   const area = document.getElementById("explanationArea");
   area.style.borderLeft =
@@ -779,11 +1020,33 @@ function updateRemain() {
     `🧩 クリアまであと ${remain} 問`;
 }
 
+function autoScaleGame() {
+  const isTabletOrPhone = window.innerWidth <= 1024;
+  const isLandscape = window.innerWidth > window.innerHeight;
+
+  if (!isTabletOrPhone || !isLandscape) {
+    document.getElementById("gameInner").style.transform = "scale(1)";
+    return;
+  }
+
+  const inner = document.getElementById("gameInner");
+  const screenHeight = window.innerHeight;
+  const contentHeight = inner.scrollHeight;
+
+  if (contentHeight > screenHeight) {
+    const scale = screenHeight / contentHeight;
+    inner.style.transform = `scale(${scale})`;
+  } else {
+    inner.style.transform = "scale(1)";
+  }
+}
 
 function checkAnswer(index) {
   const q = stageQuizzes[current];
   if (!q || !isPlaying) return;
 
+  isPlaying = false;
+  isPaused = true;
   stopCaseTimer();
 
   // =========================
@@ -791,24 +1054,19 @@ function checkAnswer(index) {
   // =========================
   if (q.questionType === "case") {
     const step = q.steps[currentStep];
-    if (!step) {
-      console.warn("CASE step undefined", currentStep, q.steps.length);
-      return;
-    }
+    if (!step) return;
 
     const isCorrect = step.answers.includes(index);
 
+    paintAnswers(step.answers, [index]);
+
     showPopup(isCorrect ? "○" : "×");
 
-    // 🔊 正解・不正解 音
     if (isCorrect) {
       playSound(sounds.correct);
     } else {
       playSound(sounds.wrong);
-    }
-
-    if (!isCorrect) {
-      hp -= HP_WRONG;       // ★ CASEのミスだけ減点
+      hp -= HP_WRONG;
       updateHpBar();
 
       if (hp <= 0) {
@@ -817,30 +1075,32 @@ function checkAnswer(index) {
       }
     }
 
-    // 解説表示（CASEは数秒で消す）
-    const expEl = document.getElementById("explanationText");
-    expEl.textContent = step.explanation || "";
-    setTimeout(() => {
-      expEl.textContent = "";
-    }, 5000);
-
-    // memo 追加
     if (step.memo) {
       memoList.push(step.memo);
+      renderCaseUI(q);
     }
 
-    advanceQuestion({ correct: isCorrect });
+    document.getElementById("explanationText").textContent =
+      step.explanation || "";
+
+    setTimeout(() => {
+      isPaused = false;
+      advanceQuestion({ correct: isCorrect });
+    }, 1200);
+
     return;
   }
 
   // =========================
   // NORMAL 問題
   // =========================
+
   const isCorrect = q.answers.includes(index);
+
+  paintAnswers(q.answers, [index]);
 
   showPopup(isCorrect ? "○" : "×");
 
-  // 🔊 正解・不正解 音
   if (isCorrect) {
     playSound(sounds.correct);
     hp += HP_CORRECT;
@@ -860,21 +1120,53 @@ function checkAnswer(index) {
     return;
   }
 
-  advanceQuestion({ correct: isCorrect });
+  setTimeout(() => {
+    isPaused = false;
+    advanceQuestion({ correct: isCorrect });
+  }, 1200);
+}
+
+function paintAnswers(correctIndexes, selectedIndexes) {
+  const buttons = document.querySelectorAll("#choices .choice");
+
+  buttons.forEach((btn, i) => {
+    btn.disabled = true;
+
+    // 正解は常に緑
+    if (correctIndexes.includes(i)) {
+      btn.classList.add("correct");
+    }
+
+    // 押したけど間違いは赤
+    if (selectedIndexes.includes(i) && !correctIndexes.includes(i)) {
+      btn.classList.add("wrong");
+    }
+  });
 }
 
 
 
+
 function openStage(stage) {
-    selectedStage = stage;
+  selectedStage = stage;
 
   document.getElementById("stageList").style.display = "none";
   document.getElementById("stageDetail").style.display = "block";
 
   const info = getStages()[String(stage)] || {};
-  document.getElementById("stageTitle").textContent = info.title || "";
-  document.getElementById("stageDescription").textContent = info.description || "";
-  document.getElementById("stageKnowledge").textContent = info.knowledge || "";
+
+  document.getElementById("stageTitle").textContent =
+    info.title || "";
+
+  document.getElementById("stageDescription").textContent =
+    info.description || "";
+
+  // ★ knowledge（改行対応・安全）
+  const knowledgeEl = document.getElementById("stageKnowledge");
+  knowledgeEl.innerHTML = info.knowledge
+    ? info.knowledge.replace(/\n/g, "<br>")
+    : "";
+
   // ステージ1〜3
   if (stage <= 3) {
     enterStage(stage);
@@ -885,7 +1177,7 @@ function openStage(stage) {
   if (stage === 4) {
     if (!isLoggedIn) {
       openLoginModal();
-  return;
+      return;
     }
     enterStage(stage);
     return;
@@ -904,6 +1196,7 @@ function openStage(stage) {
 
   enterStage(stage);
 }
+
 
 function enterStage(stage) {
   selectedStage = stage;
@@ -928,7 +1221,17 @@ function setChoicesDisabled(disabled) {
 
 document.getElementById("closeLoginModal").onclick = () => {
   document.getElementById("loginModal").style.display = "none";
+
+  // ステージ詳細を閉じる
+  document.getElementById("stageDetail").style.display = "none";
+
+  // メニュー一覧へ戻る
+  document.getElementById("stageList").style.display = "block";
+
+  // ログインバー表示
+  authBar.style.display = "flex";
 };
+
 
 document.getElementById("signupBtn").onclick = async () => {
   const email = emailInput.value;
@@ -953,7 +1256,17 @@ document.getElementById("signupBtn").onclick = async () => {
     "確認メールを送りました。\n" +
     "メール内のリンクをクリックするとログイン完了です。"
   );
+
+  // ★ モーダルを閉じる
+  document.getElementById("loginModal").style.display = "none";
+
+  // ★ メニューへ戻る
+  showMenuScreen();
+
+  // ★ ステージ状態を更新
+  renderStageList();
 };
+
 
 
 
@@ -974,6 +1287,7 @@ function showJudge(isCorrect) {
 
 function startCaseTimer(step) {
   stopCaseTimer();
+
   const secEl = document.getElementById("caseTimerSec");
   const timerEl = document.getElementById("caseTimer");
 
@@ -984,21 +1298,43 @@ function startCaseTimer(step) {
   caseTimerId = setInterval(() => {
     t--;
     secEl.textContent = t;
+
     if (t <= 0) {
-  stopCaseTimer();
+      stopCaseTimer();
 
-  hp -= HP_WRONG;          // ★ タイムアウトも減点
-  updateHpBar();
+      // ★ HP減少
+      hp -= HP_WRONG;
+      updateHpBar();
 
-  if (hp <= 0) {
-    endStage("gameover");
-    return;
-  }
+      const q = stageQuizzes[current];
+      if (!q) return;
 
-  advanceQuestion({ correct: false });
-}
+      const stepData = q.steps[currentStep];
+
+      // ★ memo追加（正解不正解関係なく）
+      if (stepData?.memo) {
+        memoList.push(stepData.memo);
+        renderCaseUI(q);
+      }
+
+      // ★ 解説は消さない
+      document.getElementById("explanationText").textContent =
+        stepData?.explanation || "";
+
+      if (hp <= 0) {
+        endStage("gameover");
+        return;
+      }
+
+      // ★ 1秒待ってから次へ（演出時間）
+      setTimeout(() => {
+        advanceQuestion({ correct: false });
+      }, 1000);
+    }
+
   }, 1000);
 }
+
 
 
 function stopCaseTimer() {
@@ -1034,17 +1370,16 @@ function startCountdown(cb) {
   }, 1000);
 }
 
-
-
-
 async function loadFromSheet(retry = 3) {
-  const URL = "https://script.googleusercontent.com/macros/echo?user_content_key=AehSKLj_09em7QhPTtEb455Spu__WC_Y84c0SkJxoAYEvBhLVuZEEh7KcB_ab6Xq9BKl10cYAWGGe_XB5VSPK1LBLgDw47tHTfBp45Cyfqm5cR1y3ic38KpJaoUiakClWEmijucwCyeNCCOa3bhnTCbMzry8LoZHeEfnQQ2HyY8ZJjc8eaRGDi8k9Iz7gPq10bUKrpiESu0uSr0eC-Z-DEC0TThQdSgnKSGS8lfHlY4s4v-1njNgztaYtrOcOxMbwYbdajNSdvbTCGxTepZCfPKa6v-bke2UCg&lib=M-c4AW_-jaCtRM9OSBimxB9GSk0SJ0LNw";
+  const baseURL = "https://script.google.com/macros/s/AKfycbxwFdMyj-GQ6YucmKNwJwM8nuKqsThsSnAKWlnLS5pIicsKQEY6vAOQKiTykRLCmGI8/exec";
+
+  // キャッシュ回避（？にする）
+  const URL = baseURL + "?t=" + new Date().getTime();
 
   try {
     const res = await fetch(URL, {
       method: "GET",
-      mode: "cors",
-      cache: "no-store",
+      mode: "cors"
     });
 
     if (!res.ok) {
@@ -1053,13 +1388,12 @@ async function loadFromSheet(retry = 3) {
 
     const data = await res.json();
 
-    // 構造チェック（重要）
     if (!data || !data.quizzes || !data.stages) {
       throw new Error("Invalid JSON structure");
     }
 
-    localStorage.setItem("flowQuizzes", JSON.stringify(data.quizzes));
-    localStorage.setItem("flowStages", JSON.stringify(data.stages));
+    quizzesCache = data.quizzes;
+    stagesCache = data.stages;
 
     console.log("✅ Sheet loaded", data);
 
@@ -1073,6 +1407,8 @@ async function loadFromSheet(retry = 3) {
     }
   }
 }
+
+
 function move() {
   if (!isPlaying || isPaused) return;
 
@@ -1118,23 +1454,17 @@ function move() {
   requestAnimationFrame(move);
 }
 
-
-
-
-
-
-
-
 function advanceQuestion({ correct }) {
+
+  isPlaying = true;
 
   if (correct) {
     correctCount++;
-
-    // ★ 正解時スピードアップ
     speed = Math.min(
-      stageConfig.speedMax,
+      getMaxSpeed(),
       speed + stageConfig.speedUpRate
     );
+
     updateSpeedInfo();
 
     if (correctCount >= stageConfig.clearLine) {
@@ -1158,13 +1488,18 @@ function advanceQuestion({ correct }) {
         current++;
         currentStep = 0;
         memoList = [];
-        initLanes();   // ← 次の問題でも speed は維持される
+        initLanes();
         renderQuestion();
+        requestAnimationFrame(move);   // ← 追加
       }, 500);
       return;
     }
 
-    setTimeout(renderQuestion, 300);
+    setTimeout(() => {
+      renderQuestion();
+      requestAnimationFrame(move);   // ← 追加
+    }, 300);
+
     return;
   }
 
@@ -1176,13 +1511,21 @@ function advanceQuestion({ correct }) {
   }
 
   initLanes();
+
   setTimeout(() => {
     renderQuestion();
     updateRemain();
+    requestAnimationFrame(move);   // ← 追加（重要）
+    isPaused = false;
+
   }, 300);
 }
 
-
+window.addEventListener("resize", autoScaleGame);
+window.addEventListener("DOMContentLoaded", async () => {
+  await loadFromSheet();
+  renderStageList();
+});
 
 
 

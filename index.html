@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <title>Flow Quiz</title>
   <link rel="stylesheet" href="style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+
 </head>
 <body>
 <!-- ヘッダーログインエリア -->
@@ -78,15 +80,20 @@
   <h2 id="stageTitle"></h2>
   <p id="stageDescription"></p>
   <p id="stageKnowledge"></p>
-
-  <button onclick="startGame()">▶ ゲーム開始</button>
+<div class="stage-buttons">
+<button onclick="startGame()">▶ ゲーム開始</button>
   <button onclick="endToList()">戻る</button>
+</div>
+  
 </div>
 
 <!-- =========================
      ゲーム画面
 ========================= -->
 <div id="gameScreen" style="display:none">
+  <div id="gameInner">
+
+  
 
   <!-- HUD -->
   <div id="hud">
@@ -113,17 +120,13 @@
 
     <!-- case 制限時間 -->
     <div id="caseTimer" class="case-timer" style="display:none">
-      ⏱ 残り <span id="caseTimerSec">15</span> 秒
+      ⏱<span id="caseTimerSec">15</span> 秒
     </div>
 
-    <h3 class="case-title">🩺 症例</h3>
     <div id="caseText" class="case-text"></div>
 
-
-    <h4>❓ 問題</h4>
     <div id="caseQuestion" class="case-question"></div>
 
-    <h4>📝 これまでの判断</h4>
     <div id="caseMemo"></div>
 
   </div>
@@ -132,26 +135,26 @@
        レーン（normal問題）
   ========================= -->
   <div id="laneContainer">
-    <div class="lane" data-lane="0">
-      <div id="question-0" class="question"></div>
-    </div>
-    <div class="lane" data-lane="1">
-      
-    </div>
+  <div class="lane" data-lane="0">
+    <div id="question-0" class="question"></div>
   </div>
+  </div>
+  <img id="questionImage" class="question-image" />
 
   <!-- 解説 -->
   <div id="explanationArea">
-    <h4>📘 解説</h4>
     <div id="explanationText" class="muted">
       問題を解くと、ここに解説が表示されます
     </div>
   </div>
 
   <!-- 選択肢 -->
+<!-- 選択肢エリア -->
+  <div id="choiceArea">
   <div id="choices"></div>
- <div id="judge" class="judge"></div>
-
+  <div id="judge" class="judge"></div>
+  </div>
+</div>
 </div>
 
 <!-- =========================
@@ -168,7 +171,6 @@
 <!-- ログイン促しモーダル -->
 <div id="loginModal" class="overlay" style="display:none">
   <div class="login-card">
-  <h2>🔐 ログイン / 新規登録</h2>
   <p class="login-sub">
     ログインすると <strong>ステージ4以降</strong> が解放されます
   </p>
@@ -191,11 +193,12 @@
     ＋ 新規登録
   </button>
 
-  <div class="divider">あとでやる</div>
-
   <button id="closeLoginModal" class="ghost-btn">
     閉じる
   </button>
+</div>
+<div id="rotateNotice">
+  📱 横向きにしてプレイしてください
 </div>
 
 </div>
